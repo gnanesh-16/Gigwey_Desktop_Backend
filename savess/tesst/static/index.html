@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Action Recorder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .recordings-list {
+            margin-top: 20px;
+        }
+
+        .recording-item {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .recording-item:hover {
+            background-color: #e8e8e8;
+        }
+
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+
+        .replay-options {
+            background-color: #f8f8f8;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .replay-options label {
+            display: block;
+            margin: 10px 0;
+        }
+
+        .replay-options input[type="number"] {
+            width: 60px;
+            padding: 5px;
+        }
+
+        .paused {
+            background-color: #f44336 !important;
+        }
+
+        #stopReplayButton {
+            display: none;
+            background-color: #f44336;
+        }
+        #stopReplayButton:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Action Recorder</h1>
+        
+        <div class="buttons">
+            <button onclick="startRecording()">Start Recording</button>
+            <button onclick="stopRecording()" class="danger">Stop Recording (ESC)</button>
+            <button onclick="togglePause()" id="pauseButton">Pause Recording</button>
+            <button onclick="listRecordings()">List Recordings</button>
+            <button onclick="stopReplay()" id="stopReplayButton">Stop Replay</button>
+        </div>
+
+        <div id="status"></div>
+        <div id="replay-options" class="replay-options">
+            <h3>Replay Options</h3>
+            <label>
+                <input type="checkbox" id="precise-timing" checked>
+                Enable precise timing
+            </label>
+            <label>
+                <input type="checkbox" id="enable-loop" onchange="toggleLoopCount()">
+                Enable loop replay
+            </label>
+            <label id="loop-count-container" style="display: none;">
+                Loop count (2-10):
+                <input type="number" id="loop-count" min="2" max="10" value="2">
+            </label>
+            <button onclick="startReplayWithOptions()">Start Replay</button>
+        </div>
+
+        <div id="recordings-list" class="recordings-list"></div>
+    </div>
+
+    <script>
+        let selectedRecordingPath = null;
+        let isPaused = false;
+        let isReplaying = false;
+
+        async function startRecording() {
+            try {
+                const response = await fetch('/start-recording', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                isPaused = false;
+                const pauseButton = document.getElementById('pauseButton');
+                pauseButton.textContent = 'Pause Recording';
+                pauseButton.classList.remove('paused');
+                showStatus(data.message, 'success');
+            } catch (error) {
+                showStatus('Error starting recording: ' + error, 'error');
+            }
+        }
+
+        async function listRecordings() {
+            try {
+                const response = await fetch('/list-recordings');
+                const data = await response.json();
+                displayRecordings(data.recordings);
+            } catch (error) {
+                showStatus('Error listing recordings: ' + error, 'error');
+            }
+        }
+
+        async function replayRecording(path) {
+            try {
+                // Hide any existing replay options
+                document.getElementById('replay-options').style.display = 'none';
+                
+                const response = await fetch('/replay-recording', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        path: path
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.status === "success") {
+                    isReplaying = true;
+                    document.getElementById('stopReplayButton').style.display = 'inline-block';
+                }
+                showStatus(data.message, data.status);
+            } catch (error) {
+                showStatus('Error starting replay: ' + error, 'error');
+            }
+        }
+
+        async function stopReplay() {
+            try {
+                const response = await fetch('/stop-replay', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                isReplaying = false;
+                document.getElementById('stopReplayButton').style.display = 'none';
+                showStatus(data.message, 'success');
+            } catch (error) {
+                showStatus('Error stopping replay: ' + error, 'error');
+            }
+        }
+
+        async function stopRecording() {
+            try {
+                const response = await fetch('/stop-recording', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                isPaused = false;
+                const pauseButton = document.getElementById('pauseButton');
+                pauseButton.textContent = 'Pause Recording';
+                pauseButton.classList.remove('paused');
+                showStatus(data.message, 'success');
+            } catch (error) {
+                showStatus('Error stopping recording: ' + error, 'error');
+            }
+        }
+
+        async function togglePause() {
+            try {
+                const endpoint = isPaused ? '/unpause-recording' : '/pause-recording';
+                const response = await fetch(endpoint, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                isPaused = !isPaused;
+                const pauseButton = document.getElementById('pauseButton');
+                pauseButton.textContent = isPaused ? 'Resume Recording' : 'Pause Recording';
+                pauseButton.classList.toggle('paused');
+                
+                showStatus(data.message, 'success');
+            } catch (error) {
+                showStatus('Error toggling pause: ' + error, 'error');
+            }
+        }
+
+        function toggleLoopCount() {
+            const loopEnabled = document.getElementById('enable-loop').checked;
+            document.getElementById('loop-count-container').style.display = 
+                loopEnabled ? 'block' : 'none';
+        }
+
+        function showReplayOptions(path) {
+            selectedRecordingPath = path;
+            document.getElementById('replay-options').style.display = 'block';
+        }
+
+        async function startReplayWithOptions() {
+            if (!selectedRecordingPath) {
+                showStatus('No recording selected', 'error');
+                return;
+            }
+
+            const precisionMode = document.getElementById('precise-timing').checked;
+            const loopEnabled = document.getElementById('enable-loop').checked;
+            const loopCount = loopEnabled ? 
+                parseInt(document.getElementById('loop-count').value) : 1;
+
+            try {
+                const response = await fetch('/replay-recording-with-options', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        path: selectedRecordingPath,
+                        precision: precisionMode,
+                        loop_enabled: loopEnabled,
+                        loop_count: loopCount
+                    })
+                });
+                const data = await response.json();
+                isReplaying = true;
+                document.getElementById('stopReplayButton').style.display = 'inline-block';
+                showStatus(data.message, 'success');
+            } catch (error) {
+                showStatus('Error starting replay: ' + error, 'error');
+            }
+        }
+
+        function displayRecordings(recordings) {
+            const listElement = document.getElementById('recordings-list');
+            if (recordings.length === 0) {
+                listElement.innerHTML = '<p>No recordings found.</p>';
+                return;
+            }
+
+            listElement.innerHTML = '<h2>Available Recordings</h2>';
+            recordings.forEach(recording => {
+                const item = document.createElement('div');
+                item.className = 'recording-item';
+                item.textContent = recording.name;
+                item.onclick = () => showReplayOptions(recording.path);
+                listElement.appendChild(item);
+            });
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = type;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        window.onload = function() {
+            document.getElementById('stopReplayButton').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
